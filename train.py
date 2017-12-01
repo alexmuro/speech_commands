@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-r"""Simple speech recognition to spot a limited number of keywords.
+"""Simple speech recognition to spot a limited number of keywords.
 
 This is a self-contained example script that will train a very basic audio
 recognition model in TensorFlow. It downloads the necessary training data and

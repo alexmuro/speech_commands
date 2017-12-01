@@ -22,6 +22,9 @@ from __future__ import print_function
 import math
 
 import tensorflow as tf
+slim = tf.contrib.slim
+
+import vgg
 
 
 def prepare_model_settings(label_count, sample_rate, clip_duration_ms,
@@ -100,6 +103,8 @@ def create_model(fingerprint_input, model_settings, model_architecture,
                                   is_training)
   elif model_architecture == 'conv':
     return create_conv_model(fingerprint_input, model_settings, is_training)
+  elif model_architecture == 'vgg_a':
+    return create_vgg_model(fingerprint_input, model_settings, is_training)
   elif model_architecture == 'low_latency_conv':
     return create_low_latency_conv_model(fingerprint_input, model_settings,
                                          is_training)
@@ -161,6 +166,33 @@ def create_single_fc_model(fingerprint_input, model_settings, is_training):
   else:
     return logits
 
+
+
+def create_vgg_model(fingerprint_input, model_settings, is_training):
+  if is_training:
+    dropout_prob = tf.placeholder(tf.float32, name='dropout_prob')
+  num_class = model_settings['label_count']
+  input_frequency_size = model_settings['dct_coefficient_count']
+  input_time_size = model_settings['spectrogram_length']
+  fingerprint_4d = tf.reshape(fingerprint_input,
+                              [-1, input_time_size, input_frequency_size, 1])
+  print ('audio tensor %s' , fingerprint_4d.get_shape())
+  with slim.arg_scope(vgg.vgg_arg_scope()):
+    outputs, end_points = vgg.vgg_a(fingerprint_4d, num_classes=num_class, is_training=is_training,dropout_keep_prob=dropout_prob)
+
+  if is_training:
+    return outputs, dropout_prob
+  else: 
+    return outputs
+ 
+  # def vgg_a(inputs,
+  #         num_classes=1000,
+  #         is_training=True,
+  #         dropout_keep_prob=0.5,
+  #         spatial_squeeze=True,
+  #         scope='vgg_a',
+  #         fc_conv_padding='VALID',
+  #         global_pool=False):
 
 def create_conv_model(fingerprint_input, model_settings, is_training):
   """Builds a standard convolutional model.

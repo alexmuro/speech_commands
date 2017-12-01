@@ -12,6 +12,6 @@ python freeze.py \
 --start_checkpoint=./log/conv.ckpt-35000 \
 --output_file=./frozen/conv1-35000
 
-python train.py --summaries_dir ./train --train_dir ./train 
+python train.py --data_dir ../gsk_train --summaries_dir ./train --train_dir ./train --model_architecture vgg_a
 
 

@@ -38,9 +38,9 @@ from tensorflow.python.platform import gfile
 from tensorflow.python.util import compat
 
 MAX_NUM_WAVS_PER_CLASS = 2**27 - 1  # ~134M
-SILENCE_LABEL = '_silence_'
+SILENCE_LABEL = 'silence'
 SILENCE_INDEX = 0
-UNKNOWN_WORD_LABEL = '_unknown_'
+UNKNOWN_WORD_LABEL = 'unknown'
 UNKNOWN_WORD_INDEX = 1
 BACKGROUND_NOISE_DIR_NAME = '_background_noise_'
 RANDOM_SEED = 59185
@@ -201,6 +201,7 @@ class AudioProcessor(object):
       statinfo = os.stat(filepath)
       tf.logging.info('Successfully downloaded %s (%d bytes)', filename,
                       statinfo.st_size)
+    print ('%s' % filepath)
     tarfile.open(filepath, 'r:gz').extractall(dest_directory)
 
   def prepare_data_index(self, silence_percentage, unknown_percentage,
