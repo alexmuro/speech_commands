@@ -171,8 +171,8 @@ def create_single_fc_model(fingerprint_input, model_settings, is_training):
 
 
 def create_vgg_model(fingerprint_input, model_settings, is_training):
-  if is_training:
-    dropout_prob = tf.placeholder(tf.float32, name='dropout_prob')
+  
+  dropout_prob = tf.placeholder(tf.float32, name='dropout_prob')
   num_class = model_settings['label_count']
   input_frequency_size = model_settings['dct_coefficient_count']
   input_time_size = model_settings['spectrogram_length']
@@ -188,8 +188,8 @@ def create_vgg_model(fingerprint_input, model_settings, is_training):
     return outputs
 
 def create_vgg_e_model(fingerprint_input, model_settings, is_training):
-  if is_training:
-    dropout_prob = tf.placeholder(tf.float32, name='dropout_prob')
+ 
+  dropout_prob = tf.placeholder(tf.float32, name='dropout_prob')
   num_class = model_settings['label_count']
   input_frequency_size = model_settings['dct_coefficient_count']
   input_time_size = model_settings['spectrogram_length']
