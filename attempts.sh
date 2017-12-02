@@ -1,10 +1,22 @@
-python train.py /
-	--background_volume .3 /
-	--window_size_ms 20 /
-	--how_many_training_steps 30000,5000 /
-	--eval_step_interval 1000 /
-	--summaries_dir ./log /
-	--train_dir ./log /
+python train.py \
+	--background_volume .3 \
+	--window_size_ms 20 \
+	--how_many_training_steps 50000,10000 \
+	--eval_step_interval 1000 \
+	--summaries_dir ./vgg_a \
+	--train_dir ./vgg_a \
+	--data_dir ../gsk_train \
+	--save_step_interval 1000
+
+python train.py \
+	--background_volume .3 \
+	--window_size_ms 20 \
+	--how_many_training_steps 50000,10000 \
+	--eval_step_interval 1000 \
+	--summaries_dir ./vgg_a \
+	--train_dir ./vgg_e \
+	--data_dir ../gsk_train \
+	--batch_size 500
 	--save_step_interval 1000
 	
 python freeze.py \

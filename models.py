@@ -105,6 +105,8 @@ def create_model(fingerprint_input, model_settings, model_architecture,
     return create_conv_model(fingerprint_input, model_settings, is_training)
   elif model_architecture == 'vgg_a':
     return create_vgg_model(fingerprint_input, model_settings, is_training)
+  elif model_architecture == 'vgg_e':
+    create_vgg_e_model(fingerprint_input, model_settings, is_training)
   elif model_architecture == 'low_latency_conv':
     return create_low_latency_conv_model(fingerprint_input, model_settings,
                                          is_training)
@@ -169,6 +171,23 @@ def create_single_fc_model(fingerprint_input, model_settings, is_training):
 
 
 def create_vgg_model(fingerprint_input, model_settings, is_training):
+  if is_training:
+    dropout_prob = tf.placeholder(tf.float32, name='dropout_prob')
+  num_class = model_settings['label_count']
+  input_frequency_size = model_settings['dct_coefficient_count']
+  input_time_size = model_settings['spectrogram_length']
+  fingerprint_4d = tf.reshape(fingerprint_input,
+                              [-1, input_time_size, input_frequency_size, 1])
+  print ('audio tensor %s' , fingerprint_4d.get_shape())
+  with slim.arg_scope(vgg.vgg_arg_scope()):
+    outputs, end_points = vgg.vgg_a(fingerprint_4d, num_classes=num_class, is_training=is_training,dropout_keep_prob=dropout_prob)
+
+  if is_training:
+    return outputs, dropout_prob
+  else: 
+    return outputs
+
+def create_vgg_e_model(fingerprint_input, model_settings, is_training):
   if is_training:
     dropout_prob = tf.placeholder(tf.float32, name='dropout_prob')
   num_class = model_settings['label_count']
