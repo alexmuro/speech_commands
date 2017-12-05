@@ -1,0 +1,1 @@
+python make_entry --graph ./frozen/vgg_a-60000.pb --labels vgg_a/conv_labels.txt --test_dir test_data/audio

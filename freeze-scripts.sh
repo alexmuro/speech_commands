@@ -1,4 +1,1 @@
-python freeze.py \
---window_size_ms 20 \
---start_checkpoint=./log/conv.ckpt-35000 \
---output_file=./frozen/conv1-35000
+python freeze.py --window_size_ms 20 --start_checkpoint=./vgg_a/conv.ckpt-60000 --output_file=./frozen/vgg_a-60000
