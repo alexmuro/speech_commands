@@ -2,4 +2,4 @@ train/
 test/
 *.csv
 gsk_train/
-GCommandsPyTorch/gsk_py_train
+GCommandsPyTorch/gsk_py_train/
