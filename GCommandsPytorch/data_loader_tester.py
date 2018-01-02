@@ -1,7 +1,7 @@
 from gcommand_loader import GCommandLoader
 import torch
 
-dataset = GCommandLoader('./gcommands/test')
+dataset = GCommandLoader('./gsk_train/test')
 
 test_loader = torch.utils.data.DataLoader(
         dataset, batch_size=100, shuffle=None,
