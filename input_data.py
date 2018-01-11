@@ -447,7 +447,7 @@ class AudioProcessor(object):
         time_shift_amount = np.random.randint(-time_shift, time_shift)
       else:
         time_shift_amount = 0
-      if time_shift_amount > 0:
+      if time_shift_amount > 0:_s
         time_shift_padding = [[time_shift_amount, 0], [0, 0]]
         time_shift_offset = [0, 0]
       else:

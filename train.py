@@ -398,7 +398,7 @@ if __name__ == '__main__':
       '--wanted_words',
       type=str,
       default='yes,no,up,down,left,right,on,off,stop,go',
-      help='Words to use (others will be added to an unknown label)',)
+      help='Words to use (others will be added to an unknown label)')
   parser.add_argument(
       '--train_dir',
       type=str,

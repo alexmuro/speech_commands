@@ -1,5 +1,7 @@
 train/
 test/
 *.csv
+*.pyc
 gsk_train/
-GCommandsPyTorch/gsk_py_train/
+GCommandsPyTorch/gcommands/
+*.t7

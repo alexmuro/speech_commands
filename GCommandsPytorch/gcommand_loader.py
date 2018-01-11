@@ -114,15 +114,37 @@ def is_audio_file(filename):
 #                     item = (path, class_to_idx[target])
 #                     spects.append(item)
 #     return spects
+def do_time_shift(y,time_shift):
+    # if time shift, get random shift value
+    time_shift_amount = np.random.randint(-time_shift, time_shift)
+    if time_shift_amount > 0: 
+      time_shift_padding = [time_shift_amount, 0] 
+      y = np.pad(y,time_shift_padding,'constant') #shift forward so left pad
+      y = y[0:16000] #slice to first second
+    else:
+      time_shift_padding = [0, -time_shift_amount]
+      y = np.pad(y,time_shift_padding,'constant') #shift backward so right pad
+      y = y[-time_shift_amount:] #slice to last second
+    return y
 
-
-def spect_loader(path, window_size, window_stride, window, normalize, max_len=101):
+def wav_loader(path):
     y, sr = librosa.load(path, sr=None)
-    # n_fft = 4096
+    return y,sr
+
+def add_background_sample(y,sample):
+    input_length = len(y)
+    sample_start = random.randint(0, len(sample)-input_length)
+    sample_sample = sample[sample_start:(sample_start + input_length)]
+    return y + sample_sample
+
+def spect_loader(y,sr, window_size, window_stride, window, normalize, max_len=101):
+    
+
     n_fft = int(sr * window_size)
     win_length = n_fft
     hop_length = int(sr * window_stride)
-
+    sample_length = len(y)
+    
     # STFT
     D = librosa.stft(y, n_fft=n_fft, hop_length=hop_length,
                      win_length=win_length, window=window)
@@ -147,7 +169,7 @@ def spect_loader(path, window_size, window_stride, window, normalize, max_len=10
         std = spect.std()
         if std != 0:
             spect.add_(-mean)
-            spect.div_(std)
+            spect.div_(std)   
 
     return spect
 
@@ -175,17 +197,17 @@ class GCommandLoader(data.Dataset):
         STFT parameter: window_size, window_stride, window_type, normalize
     """
 
-    def __init__(self, data_index, classes, class_to_idx, transform=None, target_transform=None, window_size=.02,
-                 window_stride=.01, window_type='hamming', normalize=True, max_len=101):
+    def __init__(self, data_index, classes, class_to_idx, background_data=[],background_frequency=0,background_volume=0.3,transform=None, target_transform=None, window_size=.02,
+                 window_stride=.01, time_shift=0, window_type='hamming', normalize=True, max_len=101):
         
         #self.data_dir = data_dir
-        background_spects = []
+        
         spects = data_index
         if len(spects) == 0:
             raise (RuntimeError("Found 0 sound files in subfolders of: " + root + "Supported audio file extensions are: " + ",".join(AUDIO_EXTENSIONS)))
 
         self.spects = spects
-        self.background_spects = background_spects
+        self.background_data = background_data
         self.classes = classes
         self.class_to_idx = class_to_idx
         self.transform = transform
@@ -196,6 +218,10 @@ class GCommandLoader(data.Dataset):
         self.window_type = window_type
         self.normalize = normalize
         self.max_len = max_len
+        self.time_shift = time_shift
+        self.background_frequency = background_frequency
+        self.background_volume = background_volume
+        self.background_spects = self.load_background_data()
 
     def __getitem__(self, index):
         """
@@ -204,58 +230,43 @@ class GCommandLoader(data.Dataset):
         Returns:
             tuple: (spect, target) where target is class_index of the target class.
         """
+        #print(index)
         path = self.spects[index]['file']
         label = self.spects[index]['label']
         target = self.class_to_idx[label]
-        spect = self.loader(path, self.window_size, self.window_stride, self.window_type, self.normalize, self.max_len)
-        if self.transform is not None:
-          spect = self.transform(spect)
-        if self.target_transform is not None:
-          target = self.target_transform(target)
+
+        y, sr = librosa.load(path, sr=None)
+
         if label == 'silence':
-          spect = spect.mul(0)
+            y = np.multiply(y,0)
+
+        if self.time_shift > 0: 
+            y = do_time_shift(y,self.time_shift)
+
+        if random.random() < self.background_frequency:
+            background_index = random.randint(0,len(self.background_spects)-1)
+            background_spect = self.background_spects[background_index] 
+            background_spect = np.multiply(background_spect,self.background_volume)
+            y = add_background_sample(y,background_spect)
+
+        spect = self.loader(y, sr, self.window_size, self.window_stride, self.window_type, self.normalize, max_len=self.max_len)
+        
 
         return spect, target
 
     def __len__(self):
         return len(self.spects)
 
-    def prepare_background_data(self):
-      """Searches a folder for background noise audio, and loads it into memory.
+    def load_background_data(self):
+      spects = []
+      
+      for path in self.background_data:
+        y, sr = librosa.load(path, sr=None)
+        spects.append(y) # should I care about sample rate? for now fixed at 16000/s
 
-      It's expected that the background audio samples will be in a subdirectory
-      named '_background_noise_' inside the 'data_dir' folder, as .wavs that match
-      the sample rate of the training data, but can be much longer in duration.
+      return spects
 
-      If the '_background_noise_' folder doesn't exist at all, this isn't an
-      error, it's just taken to mean that no background noise augmentation should
-      be used. If the folder does exist, but it's empty, that's treated as an
-      error.
-
-      Returns:
-        List of raw PCM-encoded audio samples of background noise.
-
-      Raises:
-        Exception: If files aren't found in the folder.
-      """
-      self.background_data = []
-      background_dir = os.path.join(self.data_dir, BACKGROUND_NOISE_DIR_NAME)
-      if not os.path.exists(background_dir):
-        return self.background_data
-      with tf.Session(graph=tf.Graph()) as sess:
-        wav_filename_placeholder = tf.placeholder(tf.string, [])
-        wav_loader = io_ops.read_file(wav_filename_placeholder)
-        wav_decoder = contrib_audio.decode_wav(wav_loader, desired_channels=1)
-        search_path = os.path.join(self.data_dir, BACKGROUND_NOISE_DIR_NAME,
-                                   '*.wav')
-        for wav_path in gfile.Glob(search_path):
-          wav_data = sess.run(
-              wav_decoder,
-              feed_dict={wav_filename_placeholder: wav_path}).audio.flatten()
-          self.background_data.append(wav_data)
-        if not self.background_data:
-          raise Exception('No background wav files were found in ' + search_path)
-
+    
 class AudioProcessor(object):
   """Handles loading, partitioning, and preparing audio training data."""
 
@@ -266,7 +277,7 @@ class AudioProcessor(object):
     self.prepare_data_index(silence_percentage, unknown_percentage,
                             wanted_words, validation_percentage,
                             testing_percentage)
-    #self.prepare_background_data()
+    self.prepare_background_data()
     #self.prepare_processing_graph(model_settings)
 
   def maybe_download_and_extract_dataset(self, data_url, dest_directory):
@@ -310,6 +321,37 @@ class AudioProcessor(object):
     print ('unzipping %s' % filepath)
     tarfile.open(filepath, 'r:gz').extractall(dest_directory)
 
+  def prepare_background_data(self):
+      """Searches a folder for background noise audio, and loads it into memory.
+
+      It's expected that the background audio samples will be in a subdirectory
+      named '_background_noise_' inside the 'data_dir' folder, as .wavs that match
+      the sample rate of the training data, but can be much longer in duration.
+
+      If the '_background_noise_' folder doesn't exist at all, this isn't an
+      error, it's just taken to mean that no background noise augmentation should
+      be used. If the folder does exist, but it's empty, that's treated as an
+      error.
+
+      Returns:
+        List of raw PCM-encoded audio samples of background noise.
+
+      Raises:
+        Exception: If files aren't found in the folder.
+      """
+      self.background_data = []
+      background_dir = os.path.join(self.data_dir, BACKGROUND_NOISE_DIR_NAME)
+      if not os.path.exists(background_dir):
+        return self.background_data
+    
+      search_path = os.path.join(self.data_dir, BACKGROUND_NOISE_DIR_NAME,
+                                   '*.wav')
+      for wav_path in gfile.Glob(search_path):
+        self.background_data.append(wav_path)
+
+      if not self.background_data:
+        raise Exception('No background wav files were found in ' + search_path)
+
   def prepare_data_index(self, silence_percentage, unknown_percentage,
                          wanted_words, validation_percentage,
                          testing_percentage):
@@ -346,15 +388,18 @@ class AudioProcessor(object):
     all_words = {}
     # Look through all the subfolders to find audio samples
     search_path = os.path.join(self.data_dir, '*', '*.wav')
+    print('# files in training: %d', len(gfile.Glob(search_path)))
     for wav_path in gfile.Glob(search_path):
       _, word = os.path.split(os.path.dirname(wav_path))
       word = word.lower()
+      
       # Treat the '_background_noise_' folder as a special case, since we expect
       # it to contain long audio samples we mix in to improve training.
       if word == BACKGROUND_NOISE_DIR_NAME:
         continue
       all_words[word] = True
       set_index = which_set(wav_path, validation_percentage, testing_percentage)
+      
       # If it's a known class, store its detail, otherwise add it to the list
       # we'll use to train the unknown label.
       if word in wanted_words_index:
@@ -373,6 +418,7 @@ class AudioProcessor(object):
     silence_wav_path = self.data_index['training'][0]['file']
     for set_index in ['validation', 'testing', 'training']:
       set_size = len(self.data_index[set_index])
+      print('size of %s: %d' % (set_index, set_size))
       silence_size = int(math.ceil(set_size * silence_percentage / 100))
       for _ in range(silence_size):
         self.data_index[set_index].append({
@@ -397,210 +443,3 @@ class AudioProcessor(object):
     self.word_to_index[SILENCE_LABEL] = SILENCE_INDEX
 
   
-
-  def prepare_processing_graph(self, model_settings):
-    """Builds a TensorFlow graph to apply the input distortions.
-
-    Creates a graph that loads a WAVE file, decodes it, scales the volume,
-    shifts it in time, adds in background noise, calculates a spectrogram, and
-    then builds an MFCC fingerprint from that.
-
-    This must be called with an active TensorFlow session running, and it
-    creates multiple placeholder inputs, and one output:
-
-      - wav_filename_placeholder_: Filename of the WAV to load.
-      - foreground_volume_placeholder_: How loud the main clip should be.
-      - time_shift_padding_placeholder_: Where to pad the clip.
-      - time_shift_offset_placeholder_: How much to move the clip in time.
-      - background_data_placeholder_: PCM sample data for background noise.
-      - background_volume_placeholder_: Loudness of mixed-in background.
-      - mfcc_: Output 2D fingerprint of processed audio.
-
-    Args:
-      model_settings: Information about the current model being trained.
-    """
-    desired_samples = model_settings['desired_samples']
-    self.wav_filename_placeholder_ = tf.placeholder(tf.string, [])
-    wav_loader = io_ops.read_file(self.wav_filename_placeholder_)
-    wav_decoder = contrib_audio.decode_wav(
-        wav_loader, desired_channels=1, desired_samples=desired_samples)
-    # Allow the audio sample's volume to be adjusted.
-    self.foreground_volume_placeholder_ = tf.placeholder(tf.float32, [])
-    scaled_foreground = tf.multiply(wav_decoder.audio,
-                                    self.foreground_volume_placeholder_)
-    # Shift the sample's start position, and pad any gaps with zeros.
-    self.time_shift_padding_placeholder_ = tf.placeholder(tf.int32, [2, 2])
-    self.time_shift_offset_placeholder_ = tf.placeholder(tf.int32, [2])
-    padded_foreground = tf.pad(
-        scaled_foreground,
-        self.time_shift_padding_placeholder_,
-        mode='CONSTANT')
-    sliced_foreground = tf.slice(padded_foreground,
-                                 self.time_shift_offset_placeholder_,
-                                 [desired_samples, -1])
-    # Mix in background noise.
-    self.background_data_placeholder_ = tf.placeholder(tf.float32,
-                                                       [desired_samples, 1])
-    self.background_volume_placeholder_ = tf.placeholder(tf.float32, [])
-    background_mul = tf.multiply(self.background_data_placeholder_,
-                                 self.background_volume_placeholder_)
-    background_add = tf.add(background_mul, sliced_foreground)
-    background_clamp = tf.clip_by_value(background_add, -1.0, 1.0)
-    # Run the spectrogram and MFCC ops to get a 2D 'fingerprint' of the audio.
-    spectrogram = contrib_audio.audio_spectrogram(
-        background_clamp,
-        window_size=model_settings['window_size_samples'],
-        stride=model_settings['window_stride_samples'],
-        magnitude_squared=True)
-    self.mfcc_ = contrib_audio.mfcc(
-        spectrogram,
-        wav_decoder.sample_rate,
-        dct_coefficient_count=model_settings['dct_coefficient_count'])
-
-  def set_size(self, mode):
-    """Calculates the number of samples in the dataset partition.
-
-    Args:
-      mode: Which partition, must be 'training', 'validation', or 'testing'.
-
-    Returns:
-      Number of samples in the partition.
-    """
-    return len(self.data_index[mode])
-
-  def get_data(self, how_many, offset, model_settings, background_frequency,
-               background_volume_range, time_shift, mode, sess):
-    """Gather samples from the data set, applying transformations as needed.
-
-    When the mode is 'training', a random selection of samples will be returned,
-    otherwise the first N clips in the partition will be used. This ensures that
-    validation always uses the same samples, reducing noise in the metrics.
-
-    Args:
-      how_many: Desired number of samples to return. -1 means the entire
-        contents of this partition.
-      offset: Where to start when fetching deterministically.
-      model_settings: Information about the current model being trained.
-      background_frequency: How many clips will have background noise, 0.0 to
-        1.0.
-      background_volume_range: How loud the background noise will be.
-      time_shift: How much to randomly shift the clips by in time.
-      mode: Which partition to use, must be 'training', 'validation', or
-        'testing'.
-      sess: TensorFlow session that was active when processor was created.
-
-    Returns:
-      List of sample data for the transformed samples, and list of labels in
-      one-hot form.
-    """
-    # Pick one of the partitions to choose samples from.
-    candidates = self.data_index[mode]
-    if how_many == -1:
-      sample_count = len(candidates)
-    else:
-      sample_count = max(0, min(how_many, len(candidates) - offset))
-    # Data and labels will be populated and returned.
-    data = np.zeros((sample_count, model_settings['fingerprint_size']))
-    labels = np.zeros((sample_count, model_settings['label_count']))
-    desired_samples = model_settings['desired_samples']
-    use_background = self.background_data and (mode == 'training')
-    pick_deterministically = (mode != 'training')
-    # Use the processing graph we created earlier to repeatedly to generate the
-    # final output sample data we'll use in training.
-    for i in xrange(offset, offset + sample_count):
-      # Pick which audio sample to use.
-      if how_many == -1 or pick_deterministically:
-        sample_index = i
-      else:
-        sample_index = np.random.randint(len(candidates))
-      sample = candidates[sample_index]
-      # If we're time shifting, set up the offset for this sample.
-      if time_shift > 0:
-        time_shift_amount = np.random.randint(-time_shift, time_shift)
-      else:
-        time_shift_amount = 0
-      if time_shift_amount > 0:
-        time_shift_padding = [[time_shift_amount, 0], [0, 0]]
-        time_shift_offset = [0, 0]
-      else:
-        time_shift_padding = [[0, -time_shift_amount], [0, 0]]
-        time_shift_offset = [-time_shift_amount, 0]
-      input_dict = {
-          self.wav_filename_placeholder_: sample['file'],
-          self.time_shift_padding_placeholder_: time_shift_padding,
-          self.time_shift_offset_placeholder_: time_shift_offset,
-      }
-      # Choose a section of background noise to mix in.
-      if use_background:
-        background_index = np.random.randint(len(self.background_data))
-        background_samples = self.background_data[background_index]
-        background_offset = np.random.randint(
-            0, len(background_samples) - model_settings['desired_samples'])
-        background_clipped = background_samples[background_offset:(
-            background_offset + desired_samples)]
-        background_reshaped = background_clipped.reshape([desired_samples, 1])
-        if np.random.uniform(0, 1) < background_frequency:
-          background_volume = np.random.uniform(0, background_volume_range)
-        else:
-          background_volume = 0
-      else:
-        background_reshaped = np.zeros([desired_samples, 1])
-        background_volume = 0
-      input_dict[self.background_data_placeholder_] = background_reshaped
-      input_dict[self.background_volume_placeholder_] = background_volume
-      # If we want silence, mute out the main sample but leave the background.
-      if sample['label'] == SILENCE_LABEL:
-        input_dict[self.foreground_volume_placeholder_] = 0
-      else:
-        input_dict[self.foreground_volume_placeholder_] = 1
-      # Run the graph to produce the output audio.
-      data[i - offset, :] = sess.run(self.mfcc_, feed_dict=input_dict).flatten()
-      label_index = self.word_to_index[sample['label']]
-      labels[i - offset, label_index] = 1
-    return data, labels
-
-  def get_unprocessed_data(self, how_many, model_settings, mode):
-    """Retrieve sample data for the given partition, with no transformations.
-
-    Args:
-      how_many: Desired number of samples to return. -1 means the entire
-        contents of this partition.
-      model_settings: Information about the current model being trained.
-      mode: Which partition to use, must be 'training', 'validation', or
-        'testing'.
-
-    Returns:
-      List of sample data for the samples, and list of labels in one-hot form.
-    """
-    candidates = self.data_index[mode]
-    if how_many == -1:
-      sample_count = len(candidates)
-    else:
-      sample_count = how_many
-    desired_samples = model_settings['desired_samples']
-    words_list = self.words_list
-    data = np.zeros((sample_count, desired_samples))
-    labels = []
-    with tf.Session(graph=tf.Graph()) as sess:
-      wav_filename_placeholder = tf.placeholder(tf.string, [])
-      wav_loader = io_ops.read_file(wav_filename_placeholder)
-      wav_decoder = contrib_audio.decode_wav(
-          wav_loader, desired_channels=1, desired_samples=desired_samples)
-      foreground_volume_placeholder = tf.placeholder(tf.float32, [])
-      scaled_foreground = tf.multiply(wav_decoder.audio,
-                                      foreground_volume_placeholder)
-      for i in range(sample_count):
-        if how_many == -1:
-          sample_index = i
-        else:
-          sample_index = np.random.randint(len(candidates))
-        sample = candidates[sample_index]
-        input_dict = {wav_filename_placeholder: sample['file']}
-        if sample['label'] == SILENCE_LABEL:
-          input_dict[foreground_volume_placeholder] = 0
-        else:
-          input_dict[foreground_volume_placeholder] = 1
-        data[i, :] = sess.run(scaled_foreground, feed_dict=input_dict).flatten()
-        label_index = self.word_to_index[sample['label']]
-        labels.append(words_list[label_index])
-    return data, labels

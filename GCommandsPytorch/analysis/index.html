@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<head>
+<style>
+
+body {
+	background: #efefef;
+}
+
+.main {
+	max-width: 1040px;
+	margin: 0 auto;
+	background-color: #fff;
+}
+
+</style>
+</head>
+<body>
+	<div class='main'>
+		test 123
+	</div>
+</body>
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script>
+	d3.csv('./lenet1.csv', (error, data) => {
+		console.log('got data', error, data)
+	 	data.reduce((final,curr) => {
+	 		//  ["filename", "guess", "percent", "label", "set"]
+	 		if (!final[curr.label]) {
+	 			final[curr.label] = {count: 0, correct: 0, guess:{}, t_distro:{}, f_distro:{} }
+	 		}
+	 		final[curr.label].count += 1
+	 		final[curr.label].correct += curr.label == curr.guess ? 1 : 0
+	 		if (!final[curr.label].guess[curr.guess]) {
+	 			final[curr.label].guess[curr.guess] = 0
+	 		}
+	 		final[curr.label].guess[curr.guess] += 1
+
+	 	}, {})
+	})
+</script>

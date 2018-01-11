@@ -25,8 +25,8 @@ parser.add_argument('--log-interval', type=int, default=10, metavar='N',help='ho
 parser.add_argument('--patience', type=int, default=5, metavar='N',help='how many epochs of no loss improvement should we wait before stop training')
 
 # feature extraction options
-parser.add_argument('--window_size', default=.02, help='window size for the stft')
-parser.add_argument('--window_stride', default=.01, help='window stride for the stft')
+parser.add_argument('--window_size', type=float,default=.02, help='window size for the stft')
+parser.add_argument('--window_stride',type=float, default=.01, help='window stride for the stft')
 parser.add_argument('--window_type', default='hamming', help='window type for the stft')
 parser.add_argument('--normalize', default=True, help='boolean, wheather or not to normalize the spect')
 parser.add_argument('--background_volume', type=float, default=0.1, help='How loud the background noise should be, between 0 and 1.')
@@ -37,6 +37,8 @@ parser.add_argument('--silence_percentage', type=float, default=10.0, help='How 
 parser.add_argument('--unknown_percentage', type=float, default=10.0, help='How much of the training data should be unknown words.')
 parser.add_argument('--data_url',type=str,default='http://download.tensorflow.org/data/speech_commands_v0.01.tar.gz',help='Location of speech training data archive on the web.')
 parser.add_argument('--data_dir',type=str,default='../../gsk_train',help='Where to download the speech training data to.')
+parser.add_argument('--time_shift_ms', type=float, default=100.0, help='Range to randomly shift the training audio by in time.')
+parser.add_argument('--sample_rate', type=int, default=16000, help='Expected sample rate of the wavs')
 args = parser.parse_args()
 
 args.cuda = args.cuda and torch.cuda.is_available()
@@ -53,13 +55,15 @@ audio_processor = AudioProcessor(
 
 
 ## test loading script
-sample = audio_processor.data_index['training'][0]
-spect = spect_loader(sample['file'], args.window_size, args.window_stride, 'hamming', True, 101)
-print(spect)
-print(spect.mul(0))
+
 #loading data
+time_shift_samples = int((args.time_shift_ms * args.sample_rate) / 1000)
 train_dataset = GCommandLoader(
   audio_processor.data_index['training'],
+  time_shift = time_shift_samples,
+  background_data=audio_processor.background_data,
+  background_frequency=args.background_frequency,
+  background_volume=args.background_volume,
   classes=audio_processor.words_list,
   class_to_idx=audio_processor.word_to_index,
   window_size=args.window_size, 
