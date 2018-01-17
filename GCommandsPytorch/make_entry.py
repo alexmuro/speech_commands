@@ -13,7 +13,7 @@ import sys
 
 # Training settings
 parser = argparse.ArgumentParser(description='ConvNets for Speech Commands Recognition')
-parser.add_argument('--output_file', default='output_LeNet_ckpt.txt', help='path to the train data folder')
+parser.add_argument('--output_file', default='output.txt', help='path to the train data folder')
 parser.add_argument('--test_dir', default='../test/audio', help='path to the train data folder')
 parser.add_argument('--wanted_words',type=str,default='yes,no,up,down,left,right,on,off,stop,go', help='Words to use (others will be added to an unknown label)')
 parser.add_argument('--label_path', default='checkpoint/labels.txt', help='path to the train data folder')

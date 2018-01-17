@@ -24,7 +24,7 @@ body {
 <script>
 	d3.csv('./lenet1.csv', (error, data) => {
 		console.log('got data', error, data)
-	 	data.reduce((final,curr) => {
+	 	var computed = data.reduce((final,curr) => {
 	 		//  ["filename", "guess", "percent", "label", "set"]
 	 		if (!final[curr.label]) {
 	 			final[curr.label] = {count: 0, correct: 0, guess:{}, t_distro:{}, f_distro:{} }
@@ -36,6 +36,17 @@ body {
 	 		}
 	 		final[curr.label].guess[curr.guess] += 1
 
+
+	 		return final
 	 	}, {})
+
+	 	console.log('computed', computed)
+	 	var total = Object.keys(computed).reduce((final, curr) => {
+			final.count += computed[curr].count
+			final.correct += computed[curr].correct
+			return final
+		},{count: 0, correct: 0})
 	})
+
+	
 </script>
